@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mobshot Arrow Lab</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #ededed; color: #111; overflow: hidden; }
+    header { height: 76px; display: flex; align-items: center; gap: 24px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #ccc; }
+    h1 { font-size: 18px; margin: 0; white-space: nowrap; }
+    .control { flex: 1; display: grid; grid-template-columns: 130px 1fr 64px; gap: 12px; align-items: center; }
+    input[type=range] { width: 100%; accent-color: #111; }
+    output { font-variant-numeric: tabular-nums; font-weight: 700; text-align: center; padding: 7px; border-radius: 8px; background: #111; color: #fff; }
+    button { border: 1px solid #aaa; border-radius: 9px; padding: 9px 14px; background: white; cursor: pointer; font-weight: 600; }
+    button:hover { background: #eee; }
+    main { height: calc(100vh - 76px); padding: 18px; }
+    .stage { position: relative; width: 100%; height: 100%; background: #fff; border: 1px solid #bbb; border-radius: 18px; overflow: hidden; box-shadow: 0 10px 30px #0001; }
+    canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+    .hint { position: absolute; left: 20px; bottom: 18px; padding: 8px 12px; border-radius: 10px; background: #fffD; color: #555; pointer-events: none; }
+    .levels { display: flex; justify-content: space-between; color: #666; font-size: 11px; margin-top: -7px; }
+    label.inline { white-space: nowrap; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mobshot Arrow Lab</h1>
+    <div class="control">
+      <strong>Suavização</strong>
+      <div>
+        <input id="smooth" type="range" min="0" max="100" value="55">
+        <div class="levels"><span>0 — original</span><span>super alta — 100</span></div>
+      </div>
+      <output id="value">55</output>
+    </div>
+    <label class="inline"><input id="raw" type="checkbox"> mostrar original</label>
+    <button id="undo">Desfazer</button>
+    <button id="clear">Limpar</button>
+  </header>
+  <main>
+    <div class="stage">
+      <canvas id="canvas"></canvas>
+      <div class="hint">Arraste livremente. O ponto onde você soltar será sempre a ponta da seta.</div>
+    </div>
+  </main>
+  <script>
+    const canvas = document.querySelector('#canvas');
+    const ctx = canvas.getContext('2d');
+    const slider = document.querySelector('#smooth');
+    const output = document.querySelector('#value');
+    const rawToggle = document.querySelector('#raw');
+    const strokes = [];
+    let active = null;
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = devicePixelRatio || 1;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      render();
+    }
+
+    function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+    function resample(points, spacing) {
+      if (points.length < 2) return points.slice();
+      const result = [points[0]];
+      let previous = points[0], carried = 0;
+      for (let i = 1; i < points.length; i++) {
+        let next = points[i], segment = distance(previous, next);
+        while (carried + segment >= spacing) {
+          const ratio = (spacing - carried) / segment;
+          previous = { x: previous.x + (next.x - previous.x) * ratio,
+                       y: previous.y + (next.y - previous.y) * ratio };
+          result.push(previous);
+          segment = distance(previous, next);
+          carried = 0;
+        }
+        carried += segment;
+        previous = next;
+      }
+      if (distance(result.at(-1), points.at(-1)) > 0.5) result.push(points.at(-1));
+      return result;
+    }
+
+    function smooth(points, amount) {
+      if (points.length < 3 || amount === 0) return points.slice();
+      const t = amount / 100;
+      let data = resample(points, 3 + t * 9);
+      const passes = 1 + Math.floor(t * 7);
+      const weight = 0.12 + t * 0.33;
+      for (let pass = 0; pass < passes; pass++) {
+        const next = [data[0]];
+        for (let i = 1; i < data.length - 1; i++) {
+          const average = { x: (data[i - 1].x + data[i + 1].x) / 2,
+                            y: (data[i - 1].y + data[i + 1].y) / 2 };
+          next.push({ x: data[i].x * (1 - weight) + average.x * weight,
+                      y: data[i].y * (1 - weight) + average.y * weight });
+        }
+        next.push(data.at(-1));
+        data = next;
+      }
+      return data;
+    }
+
+    function path(points) {
+      if (!points.length) return;
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      if (points.length === 2) ctx.lineTo(points[1].x, points[1].y);
+      else for (let i = 1; i < points.length - 1; i++) {
+        const mid = { x: (points[i].x + points[i + 1].x) / 2,
+                      y: (points[i].y + points[i + 1].y) / 2 };
+        ctx.quadraticCurveTo(points[i].x, points[i].y, mid.x, mid.y);
+      }
+      ctx.lineTo(points.at(-1).x, points.at(-1).y);
+      ctx.stroke();
+    }
+
+    function arrow(points) {
+      if (points.length < 2) return;
+      const tip = points.at(-1);
+      let pivot = points.at(-2), i = points.length - 2;
+      while (i > 0 && distance(pivot, tip) < 26) pivot = points[--i];
+      const angle = Math.atan2(tip.y - pivot.y, tip.x - pivot.x);
+      const length = 24, half = 10;
+      const base = { x: tip.x - Math.cos(angle) * length, y: tip.y - Math.sin(angle) * length };
+      const normal = { x: -Math.sin(angle), y: Math.cos(angle) };
+      ctx.beginPath();
+      ctx.moveTo(tip.x, tip.y);
+      ctx.lineTo(base.x + normal.x * half, base.y + normal.y * half);
+      ctx.lineTo(base.x + Math.cos(angle) * 7, base.y + Math.sin(angle) * 7);
+      ctx.lineTo(base.x - normal.x * half, base.y - normal.y * half);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function render() {
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      const all = active ? [...strokes, active] : strokes;
+      for (const stroke of all) {
+        if (rawToggle.checked) {
+          ctx.strokeStyle = '#999'; ctx.lineWidth = 1; ctx.setLineDash([4, 5]);
+          path(stroke);
+        }
+        const points = smooth(stroke, Number(slider.value));
+        ctx.setLineDash([]); ctx.strokeStyle = '#111'; ctx.fillStyle = '#111';
+        ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        path(points); arrow(points);
+      }
+    }
+
+    function point(event) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    }
+    canvas.addEventListener('pointerdown', event => {
+      canvas.setPointerCapture(event.pointerId); active = [point(event)]; render();
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (!active) return;
+      const p = point(event);
+      if (distance(active.at(-1), p) >= 1.5) active.push(p);
+      render();
+    });
+    canvas.addEventListener('pointerup', event => {
+      if (!active) return;
+      active.push(point(event)); strokes.push(active); active = null; render();
+    });
+    slider.addEventListener('input', () => { output.value = slider.value; render(); });
+    rawToggle.addEventListener('change', render);
+    document.querySelector('#clear').onclick = () => { strokes.length = 0; active = null; render(); };
+    document.querySelector('#undo').onclick = () => { strokes.pop(); render(); };
+    addEventListener('resize', resize);
+    resize();
+  </script>
+</body>
+</html>
