@@ -41,6 +41,7 @@ class UpdateNotificationWidget;
 #endif
 class UtilityPanel;
 class SidePanelWidget;
+struct OcrResult;
 
 class CaptureWidget : public QWidget
 {
@@ -136,6 +137,7 @@ private:
     void pushToolToStack();
     void makeChild(QWidget* w);
     void restoreCircleCountState();
+    void showOcrResult(const OcrResult& result);
 
     QList<QShortcut*> newShortcut(const QKeySequence& key,
                                   QWidget* parent,
