@@ -13,6 +13,27 @@ Este projeto é um fork do [Flameshot 14](https://github.com/flameshot-org/flame
 O código permanece sob GPL-3.0-or-later e preserva os avisos de autoria do
 projeto original. A marca e o ícone Mobshot são independentes.
 
+## Instalação — Pré-alfa 1.0.0
+
+Esta é uma versão de testes para Windows 10/11 x64. Ela ainda pode conter
+falhas; salve seu trabalho antes de testar e relate o passo exato caso o app
+seja encerrado inesperadamente.
+
+1. Baixe `Mobshot-1.0.0-pre-alpha-Windows-x64-OCR.zip` na página de
+   [releases](https://github.com/M0BD3V/Mobshot/releases).
+2. Extraia **todo** o arquivo ZIP para uma pasta comum. Não execute o programa
+   diretamente de dentro do ZIP.
+3. Abra `mobshot.exe`. O ícone ficará disponível na bandeja do Windows.
+4. Use o atalho configurado para iniciar a captura.
+
+O pacote `Windows-x64-OCR` já inclui Python, EasyOCR, PyTorch e os modelos de
+português/inglês. Não é necessário instalar essas dependências separadamente.
+A primeira leitura pode demorar mais; todo o reconhecimento ocorre localmente
+e as capturas não são enviadas para serviços externos.
+
+Para atualizar uma instalação de teste, feche o Mobshot pela bandeja antes de
+substituir a pasta extraída.
+
 
 
 ## Preview

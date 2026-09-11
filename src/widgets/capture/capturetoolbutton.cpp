@@ -118,12 +118,21 @@ void CaptureToolButton::mousePressEvent(QMouseEvent* e)
 void CaptureToolButton::animatedShow()
 {
     if (!isVisible()) {
+#if defined(Q_OS_WIN)
+        // Avoid delayed Qt animation callbacks while the fullscreen capture
+        // hierarchy is torn down after OCR. The instant transition is also
+        // visually cleaner and removes a recurring Windows crash path.
+        show();
+        resize(GlobalValues::buttonBaseSize(), GlobalValues::buttonBaseSize());
+        updateIcon();
+#else
         show();
         m_emergeAnimation->start();
         connect(m_emergeAnimation,
                 &QPropertyAnimation::finished,
                 this,
                 [this]() { updateIcon(); });
+#endif
     }
 }
 

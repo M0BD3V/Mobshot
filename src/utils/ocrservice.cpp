@@ -93,9 +93,15 @@ OcrResult OcrService::recognize(const QImage& image)
                             .arg(QString::fromStdWString(error.message().c_str())) };
     }
 #else
-    const QString runtimeRoot =
+    const QString bundledRuntime =
+      QCoreApplication::applicationDirPath() + QStringLiteral("/EasyOCR");
+    const QString userRuntime =
       QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) +
       QStringLiteral("/EasyOCR");
+    const QString runtimeRoot = QFileInfo::exists(
+                                  bundledRuntime + QStringLiteral("/python.exe"))
+      ? bundledRuntime
+      : userRuntime;
     QString python = qEnvironmentVariable("MOBSHOT_EASYOCR_PYTHON");
     if (python.isEmpty()) {
         const QString bundled = runtimeRoot + QStringLiteral("/python.exe");
