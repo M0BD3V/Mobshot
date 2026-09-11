@@ -1566,20 +1566,40 @@ void CaptureWidget::showOcrResult(const OcrResult& result)
     }
 
     QApplication::clipboard()->setText(result.text);
-    QDialog preview(this);
-    preview.setWindowTitle(tr("Texto copiado — revise se necessário"));
-    preview.resize(560, 320);
-    auto* layout = new QVBoxLayout(&preview);
-    auto* editor = new QTextEdit(result.text, &preview);
+    // Keep the OCR editor outside the fullscreen capture window and avoid a
+    // nested modal event loop. On Windows, destroying a focused QTextEdit
+    // from that nested loop could crash textinputframework.dll and terminate
+    // the tray daemon as well.
+    auto* preview = new QDialog(
+      nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    preview->setAttribute(Qt::WA_DeleteOnClose, true);
+    preview->setObjectName(QStringLiteral("mobshotOcrNote"));
+    preview->setWindowTitle(tr("Texto reconhecido"));
+    preview->resize(580, 360);
+    preview->setStyleSheet(QStringLiteral(
+      "#mobshotOcrNote { background: #f6f6f6; border: 1px solid #bdbdbd; }"
+      "QLabel { color: #111; font-size: 15px; font-weight: 600; padding: 3px; }"
+      "QTextEdit { background: white; color: #111; border: none; padding: 12px; "
+      "font: 14px 'Segoe UI'; selection-background-color: #222; }"
+      "QPushButton { min-height: 30px; padding: 3px 14px; border-radius: 7px; "
+      "border: 1px solid #111; background: #111; color: white; font-weight: 600; }"
+      "QPushButton:hover { background: #333; }"));
+    auto* layout = new QVBoxLayout(preview);
+    layout->setContentsMargins(12, 10, 12, 12);
+    layout->setSpacing(9);
+    auto* title = new QLabel(tr("Texto reconhecido"), preview);
+    layout->addWidget(title);
+    auto* editor = new QTextEdit(result.text, preview);
     editor->setAcceptRichText(false);
     layout->addWidget(editor);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok |
                                            QDialogButtonBox::Cancel,
-                                         &preview);
+                                         preview);
     auto* privacyButton = buttons->addButton(
       tr("Analisar dados privados"), QDialogButtonBox::ActionRole);
     buttons->button(QDialogButtonBox::Ok)->setText(tr("Copiar texto revisado"));
-    connect(privacyButton, &QPushButton::clicked, &preview, [editor, &preview]() {
+    buttons->button(QDialogButtonBox::Cancel)->setText(tr("Fechar"));
+    connect(privacyButton, &QPushButton::clicked, preview, [editor, preview]() {
         const auto matches = PrivacyDetector::scan(editor->toPlainText());
         QList<QTextEdit::ExtraSelection> selections;
         QStringList labels;
@@ -1597,26 +1617,29 @@ void CaptureWidget::showOcrResult(const OcrResult& result)
         editor->setExtraSelections(selections);
         if (matches.isEmpty()) {
             QMessageBox::information(
-              &preview,
+              preview,
               QObject::tr("Privacidade"),
               QObject::tr("Nenhum padrão sensível foi encontrado."));
         } else {
             labels.removeDuplicates();
             QMessageBox::information(
-              &preview,
+              preview,
               QObject::tr("Privacidade"),
               QObject::tr("%1 ocorrência(s) destacada(s): %2. Revise antes de copiar.")
                 .arg(matches.size())
                 .arg(labels.join(QStringLiteral(", "))));
         }
     });
-    connect(buttons, &QDialogButtonBox::accepted, &preview, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &preview, &QDialog::reject);
-    layout->addWidget(buttons);
-    if (preview.exec() == QDialog::Accepted) {
+    connect(buttons, &QDialogButtonBox::accepted, preview, [editor, preview]() {
         QApplication::clipboard()->setText(editor->toPlainText());
-    }
+        preview->accept();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, preview, &QDialog::reject);
+    layout->addWidget(buttons);
     OverlayMessage::push(tr("Texto copiado para a área de transferência"));
+    preview->show();
+    preview->raise();
+    preview->activateWindow();
 }
 
 /**
