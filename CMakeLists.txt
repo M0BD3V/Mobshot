@@ -1,16 +1,17 @@
 cmake_minimum_required(VERSION 3.22)
 # cmake_policy(SET CMP0076 OLD)
 
-set(FLAMESHOT_VERSION 14.0.0)
+set(FLAMESHOT_VERSION 0.1.0)
 
 # Flameshot-org
-set(GIT_API_URL "https://api.github.com/repos/flameshot-org/flameshot/releases/latest")
+set(GIT_API_URL "")
 
 project(
   flameshot
   VERSION ${FLAMESHOT_VERSION}
   LANGUAGES CXX)
-set(PROJECT_NAME_CAPITALIZED "Flameshot")
+include(CTest)
+set(PROJECT_NAME_CAPITALIZED "Mobshot")
 
 include(FetchContent)
 #Must be set before fetching external content!
@@ -59,7 +60,7 @@ endif()
 # Configuration options
 set(DEFAULT_USE_PORTABLE_CONFIG FALSE)
 if(WIN32)
-  set(DEFAULT_USE_PORTABLE_CONFIG TRUE)
+set(DEFAULT_USE_PORTABLE_CONFIG FALSE)
   # For Windows RC file.
   add_definitions(-DFLAMESHOT_VERSION_MAJOR=${CMAKE_PROJECT_VERSION_MAJOR})
   add_definitions(-DFLAMESHOT_VERSION_MINOR=${CMAKE_PROJECT_VERSION_MINOR})
@@ -83,7 +84,7 @@ option(USE_KDSINGLEAPPLICATION "Use KDSingleApplication library" ON)
 option(USE_BUNDLED_KDSINGLEAPPLICATION "Use a bundled version of the KDSingleApplication library" ${USE_KDSINGLEAPPLICATION})
 option(USE_LAUNCHER_ABSOLUTE_PATH "Use absolute path for the desktop launcher" ON)
 option(USE_WAYLAND_CLIPBOARD "USE KF Gui Wayland Clipboard" OFF)
-option(DISABLE_UPDATE_CHECKER "Disable check for updates" OFF)
+option(DISABLE_UPDATE_CHECKER "Disable check for updates" ON)
 option(ENABLE_IMGUR "Enable Imgur Uploader" OFF)
 
 if(ENABLE_IMGUR)
@@ -150,14 +151,17 @@ if(WIN32 OR APPLE)
 endif()
 
 add_subdirectory(src)
+if(BUILD_TESTING)
+  add_subdirectory(tests/unit)
+endif()
 
 # CPack
-set(CPACK_PACKAGE_VENDOR "flameshot-org")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Powerful yet simple to use screenshot software.")
+set(CPACK_PACKAGE_VENDOR "Siserv")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Captura local, rápida e inteligente para Windows.")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-set(CPACK_PACKAGE_HOMEPAGE_URL "https://flameshot.org")
-set(CPACK_PACKAGE_CONTACT "flameshot-org developers <info@flameshot.org>")
-set(CPACK_PACKAGE_ICON "${CMAKE_SOURCE_DIR}/data/img/app/org.flameshot.Flameshot.svg") # TODO: Can any generator make
+set(CPACK_PACKAGE_HOMEPAGE_URL "")
+set(CPACK_PACKAGE_CONTACT "Siserv")
+set(CPACK_PACKAGE_ICON "${CMAKE_SOURCE_DIR}/data/img/app/mobshot.png") # TODO: Can any generator make
 # use of this?
 set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_SOURCE_DIR}/README.md") # TODO: Where is this used? Do we need a better
 # source?
@@ -166,20 +170,21 @@ if(WIN32)
   # Include all dynamically linked runtime libraries such as MSVCRxxx.dll
   include(InstallRequiredSystemLibraries)
 
+  set(CPACK_PACKAGE_FILE_NAME "Mobshot-${PROJECT_VERSION}-win64")
+  set(CPACK_PACKAGE_NAME "Mobshot")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "Mobshot")
+  set(CPACK_PACKAGE_EXECUTABLES mobshot "Mobshot")
+  set(CPACK_CREATE_DESKTOP_LINKS mobshot)
+
   if(USE_PORTABLE_CONFIG)
-    set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}-win64")
     set(CPACK_GENERATOR ZIP)
 
   else()
     set(CPACK_GENERATOR WIX ZIP)
-    set(CPACK_PACKAGE_NAME "${PROJECT_NAME_CAPITALIZED}")
-    set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME_CAPITALIZED}")
-    set(CPACK_PACKAGE_EXECUTABLES ${PROJECT_NAME} "${PROJECT_NAME_CAPITALIZED}")
-    set(CPACK_CREATE_DESKTOP_LINKS ${PROJECT_NAME})
 
     # WIX (Windows .msi installer)
     # 48x48 pixels
-    set(CPACK_WIX_PRODUCT_ICON "${CMAKE_SOURCE_DIR}/data/img/app/flameshot.ico")
+    set(CPACK_WIX_PRODUCT_ICON "${CMAKE_SOURCE_DIR}/data/img/app/mobshot.ico")
     # Supported languages can be found at http://wixtoolset.org/documentation/manual/v3/wixui/wixui_localization.html
     # set(CPACK_WIX_CULTURES "ar-SA,bg-BG,ca-ES,hr-HR,cs-CZ,da-DK,nl-NL,en-US,et-EE,fi-FI,fr-FR,de-DE")
     set(CPACK_WIX_UI_BANNER "${CMAKE_SOURCE_DIR}/packaging/win-installer/Bitmaps/CPACK_WIX_UI_BANNER.BMP")
@@ -192,7 +197,7 @@ if(WIN32)
     set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/packaging/win-installer/LICENSE/GPL-3.0.txt")
     set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
 
-    set(CPACK_WIX_UPGRADE_GUID "26D8062A-66D9-48D9-8924-42090FB9B3F9")
+    set(CPACK_WIX_UPGRADE_GUID "C678D785-27D2-4A50-87B6-8B5838BA5A3D")
   endif()
 elseif(APPLE)
   set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 0)

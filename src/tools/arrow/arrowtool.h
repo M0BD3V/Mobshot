@@ -29,6 +29,12 @@ protected:
 
 public slots:
     void pressed(CaptureContext& context) override;
+    void drawStart(const CaptureContext& context) override;
+    void drawMove(const QPoint& point) override;
+    void drawEnd(const QPoint& point) override;
+
+public:
+    void move(const QPoint& pos) override;
 
 private slots:
     void setArrowStyle(int style);
@@ -41,5 +47,6 @@ private:
     };
 
     QPainterPath m_arrowPath;
+    QVector<QPointF> m_gesturePoints;
     ArrowStyle m_arrowStyle = ArrowStyle::Default;
 };

@@ -60,6 +60,7 @@ public slots:
 
 private slots:
     void updateText(const QString& string);
+    void updateTextAreaSize(const QSize& size);
     void updateFamily(const QString& string);
     void updateFontUnderline(bool underlined);
     void updateFontStrikeOut(bool strikeout);

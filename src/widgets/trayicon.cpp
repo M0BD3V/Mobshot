@@ -25,7 +25,7 @@ TrayIcon::TrayIcon(QObject* parent)
     initMenu();
     initScreenMenu();
 
-    setToolTip(QStringLiteral("Flameshot"));
+    setToolTip(QStringLiteral("Mobshot"));
 #if defined(Q_OS_MACOS)
     // Because of the following issues on MacOS "Catalina":
     // https://bugreports.qt.io/browse/QTBUG-86393
@@ -37,8 +37,9 @@ TrayIcon::TrayIcon(QObject* parent)
 #else
     setContextMenu(m_menu);
 #endif
-    QIcon icon =
-      QIcon::fromTheme("flameshot-tray", QIcon(GlobalValues::trayIconPath()));
+    // Never inherit the Flameshot theme icon: Mobshot has its own stable tray
+    // identity on every Windows theme.
+    QIcon icon(GlobalValues::trayIconPath());
 
 #if defined(Q_OS_MACOS)
     if (currentMacOsVersion >= QOperatingSystemVersion::MacOSBigSur) {
@@ -79,7 +80,7 @@ TrayIcon::TrayIcon(QObject* parent)
 
     if (ConfigHandler().showStartupLaunchMessage()) {
         showMessage(
-          "Flameshot",
+          "Mobshot",
           QObject::tr(
             "Hello, I'm here! Click icon in the tray to take a screenshot or "
             "click with a right button to see more options."),

@@ -16,6 +16,8 @@
 #include "core/qguiappcurrentscreen.h"
 #include "tools/copy/copytool.h"
 #include "utils/abstractlogger.h"
+#include "utils/ocrservice.h"
+#include "utils/privacydetector.h"
 #include "utils/screengrabber.h"
 #include "utils/screenshotsaver.h"
 #include "widgets/capture/colorpicker.h"
@@ -30,13 +32,21 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFontMetrics>
 #include <QMessageBox>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QScreen>
 #include <QShortcut>
+#include <QPushButton>
+#include <QStringList>
+#include <QTextEdit>
+#include <QTextCursor>
+#include <QVBoxLayout>
 #include <QWindow>
 
 #if !defined(DISABLE_UPDATE_CHECKER)
@@ -780,7 +790,7 @@ void CaptureWidget::paintEvent(QPaintEvent* paintEvent)
 
     if (!isActiveWindow()) {
         drawErrorMessage(
-          tr("Flameshot has lost focus. Keyboard shortcuts won't "
+          tr("Mobshot has lost focus. Keyboard shortcuts won't "
              "work until you click somewhere."),
           &painter);
     } else if (m_configError) {
@@ -1504,6 +1514,69 @@ void CaptureWidget::handleToolSignal(CaptureTool::Request r)
                 drawToolsData();
                 updateLayersPanel();
             }
+            break;
+        }
+        case CaptureTool::REQ_COPY_TEXT: {
+            commitCurrentTool();
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            const OcrResult result = OcrService::recognize(pixmap().toImage());
+            QApplication::restoreOverrideCursor();
+            if (!result.succeeded()) {
+                QMessageBox::information(this, tr("Copiar texto"), result.error);
+                break;
+            }
+
+            QApplication::clipboard()->setText(result.text);
+            QDialog preview(this);
+            preview.setWindowTitle(tr("Texto copiado — revise se necessário"));
+            preview.resize(560, 320);
+            auto* layout = new QVBoxLayout(&preview);
+            auto* editor = new QTextEdit(result.text, &preview);
+            editor->setAcceptRichText(false);
+            layout->addWidget(editor);
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok |
+                                                   QDialogButtonBox::Cancel,
+                                                   &preview);
+            auto* privacyButton = buttons->addButton(
+              tr("Analisar dados privados"), QDialogButtonBox::ActionRole);
+            buttons->button(QDialogButtonBox::Ok)->setText(tr("Copiar texto revisado"));
+            connect(privacyButton, &QPushButton::clicked, &preview, [editor, &preview]() {
+                const auto matches = PrivacyDetector::scan(editor->toPlainText());
+                QList<QTextEdit::ExtraSelection> selections;
+                QStringList labels;
+                for (const auto& match : matches) {
+                    QTextEdit::ExtraSelection selection;
+                    selection.cursor = editor->textCursor();
+                    selection.cursor.setPosition(match.start);
+                    selection.cursor.setPosition(match.start + match.length,
+                                                 QTextCursor::KeepAnchor);
+                    selection.format.setBackground(QColor(255, 199, 0, 150));
+                    selection.format.setForeground(Qt::black);
+                    selections.append(selection);
+                    labels.append(PrivacyDetector::label(match.kind));
+                }
+                editor->setExtraSelections(selections);
+                if (matches.isEmpty()) {
+                    QMessageBox::information(&preview,
+                                             QObject::tr("Privacidade"),
+                                             QObject::tr("Nenhum padrão sensível foi encontrado."));
+                } else {
+                    labels.removeDuplicates();
+                    QMessageBox::information(
+                      &preview,
+                      QObject::tr("Privacidade"),
+                      QObject::tr("%1 ocorrência(s) destacada(s): %2. Revise antes de copiar.")
+                        .arg(matches.size())
+                        .arg(labels.join(QStringLiteral(", "))));
+                }
+            });
+            connect(buttons, &QDialogButtonBox::accepted, &preview, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &preview, &QDialog::reject);
+            layout->addWidget(buttons);
+            if (preview.exec() == QDialog::Accepted) {
+                QApplication::clipboard()->setText(editor->toPlainText());
+            }
+            OverlayMessage::push(tr("Texto copiado para a área de transferência"));
             break;
         }
         default:

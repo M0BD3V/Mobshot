@@ -3,6 +3,8 @@
 
 #include "flameshot.h"
 #include "core/flameshotdaemon.h"
+#include "utils/history.h"
+#include <QDateTime>
 #if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
 #include "qhotkey.h"
 #endif
@@ -461,6 +463,13 @@ void Flameshot::exportCapture(const QPixmap& capture,
     using CR = CaptureRequest;
     int tasks = req.tasks(), mode = req.captureMode();
     QString path = req.path();
+
+    // Every completed capture is recoverable locally, independent of whether
+    // the user copies, saves or pins it. History enforces the configured cap.
+    History history;
+    history.save(capture,
+                 QDateTime::currentDateTime().toString(
+                   QStringLiteral("yyyyMMdd-HHmmss-zzz.png")));
 
     if (tasks & CR::PRINT_GEOMETRY) {
         QTextStream(stdout)

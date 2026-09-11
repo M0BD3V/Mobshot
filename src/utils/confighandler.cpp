@@ -37,7 +37,7 @@ bool verifyLaunchFile()
       "HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
       QSettings::NativeFormat);
     bool res =
-      bootUpSettings.value("Flameshot").toString() ==
+      bootUpSettings.value("Mobshot").toString() ==
       QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
 #endif
     return res;
@@ -84,7 +84,7 @@ static QMap<class QString, QSharedPointer<ValueHandler>>
     OPTION("checkForUpdates"             ,Bool               ( true          )),
 #endif
     OPTION("allowMultipleGuiInstances"   ,Bool               ( false         )),
-    OPTION("showMagnifier"               ,Bool               ( false         )),
+    OPTION("showMagnifier"               ,Bool               ( true          )),
     OPTION("squareMagnifier"             ,Bool               ( false         )),
     OPTION("autoCloseIdleDaemon"         ,Bool               ( false         )),
     OPTION("startupLaunch"               ,Bool               ( false         )),
@@ -102,13 +102,13 @@ static QMap<class QString, QSharedPointer<ValueHandler>>
     OPTION("savePath"                    ,ExistingDir        (               )),
     OPTION("savePathFixed"               ,Bool               ( false         )),
     OPTION("saveAsFileExtension"         ,SaveFileExtension  (               )),
-    OPTION("saveLastRegion"              ,Bool               ( false         )),
-    OPTION("uploadHistoryMax"            ,LowerBoundedInt    ( 0, 25         )),
+    OPTION("saveLastRegion"              ,Bool               ( true          )),
+    OPTION("uploadHistoryMax"            ,LowerBoundedInt    ( 0, 20         )),
     OPTION("undoLimit"                   ,BoundedInt         ( 0, 999, 100   )),
     // Interface tab
-    OPTION("uiLanguage"                  ,String             ( "auto"        )),
-    OPTION("uiColor"                     ,Color              ( {116, 0, 150} )),
-    OPTION("contrastUiColor"             ,Color              ( {39, 0, 50}   )),
+    OPTION("uiLanguage"                  ,String             ( "pt_BR"       )),
+    OPTION("uiColor"                     ,Color              ( {123, 66, 246})),
+    OPTION("contrastUiColor"             ,Color              ( {40, 16, 86}  )),
     OPTION("contrastOpacity"             ,BoundedInt         ( 0, 255, 190   )),
     OPTION("buttons"                     ,ButtonList         ( {}            )),
     // Filename Editor tab
@@ -136,7 +136,7 @@ static QMap<class QString, QSharedPointer<ValueHandler>>
     OPTION("showSelectionGeometryHideTime", LowerBoundedInt  ( 0, 3000       )),
     OPTION("jpegQuality"                 , BoundedInt        ( 0,100,75      )),
     OPTION("reverseArrow"                ,Bool               ( false         )),
-    OPTION("arrowStyle"                  ,BoundedInt         ( 0, 1, 0       )),
+    OPTION("arrowStyle"                  ,BoundedInt         ( 0, 1, 1       )),
     OPTION("insecurePixelate"            ,Bool               ( false         )),
 #if defined(Q_OS_WIN)
     // Not visible on settings dialog
@@ -145,7 +145,7 @@ static QMap<class QString, QSharedPointer<ValueHandler>>
 #if !defined(Q_OS_MACOS)
     // Auto-select the monitor under the cursor instead of showing
     // the monitor selection UI. Not supported on Wayland.
-    OPTION("captureActiveMonitor"         ,Bool               ( false         )),
+    OPTION("captureActiveMonitor"         ,Bool               ( true          )),
 #endif
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     // Bypass freedesktop portal and use Qt's native X11
@@ -180,6 +180,7 @@ static QMap<QString, QSharedPointer<KeySequence>> recognizedShortcuts = {
     SHORTCUT("TYPE_INVERT"              ,   "I"                     ),
     SHORTCUT("TYPE_REDO"                ,   "Ctrl+Shift+Z"          ),
     SHORTCUT("TYPE_TEXT"                ,   "T"                     ),
+    SHORTCUT("TYPE_OCR"                 ,   "Ctrl+Shift+C"          ),
     SHORTCUT("TYPE_TOGGLE_PANEL"        ,   "Space"                 ),
     SHORTCUT("TYPE_GRAB_COLOR"          ,   "G"                     ),
     SHORTCUT("TYPE_RESIZE_LEFT"         ,   "Shift+Left"            ),
@@ -222,7 +223,7 @@ ConfigHandler::ConfigHandler()
                qApp->organizationName(),
                qApp->applicationName())
 #else
-  : m_settings(qApp->applicationDirPath() + "/flameshot.ini",
+  : m_settings(qApp->applicationDirPath() + "/mobshot.ini",
                QSettings::IniFormat)
 #endif
 {
@@ -339,18 +340,18 @@ void ConfigHandler::setStartupLaunch(const bool start)
     if (start) {
         QString app_path =
           QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
-        bootUpSettings.setValue("Flameshot", app_path);
+        bootUpSettings.setValue("Mobshot", app_path);
 
         // set application workdir
-        bootUpPath.beginGroup("flameshot.exe");
+        bootUpPath.beginGroup("mobshot.exe");
         bootUpPath.setValue("Path", QCoreApplication::applicationDirPath());
         bootUpPath.endGroup();
 
     } else {
-        bootUpSettings.remove("Flameshot");
+        bootUpSettings.remove("Mobshot");
 
         // remove application workdir
-        bootUpPath.beginGroup("flameshot.exe");
+        bootUpPath.beginGroup("mobshot.exe");
         bootUpPath.remove("");
         bootUpPath.endGroup();
     }

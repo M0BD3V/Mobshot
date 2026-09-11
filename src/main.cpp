@@ -94,7 +94,7 @@ int requestCaptureAndWait(const CaptureRequest& req)
 
 QSharedMemory* guiMutexLock()
 {
-    QString key = "org.flameshot.Flameshot-" APP_VERSION;
+    QString key = "br.com.siserv.Mobshot-" APP_VERSION;
     auto* shm = new QSharedMemory(key);
 #ifdef Q_OS_UNIX
     // Destroy shared memory if the last instance crashed on Unix
@@ -149,11 +149,11 @@ void configureTranslation(QTranslator& translator, QTranslator& qtTranslator)
         if (ConfigHandler().uiLanguage() == QStringLiteral("auto")) {
             QLocale l;
             qWarning() << QStringLiteral(
-                            "No Flameshot translation found for %1")
+                            "No Mobshot translation found for %1")
                             .arg(l.uiLanguages().join(", "));
         } else {
             qWarning() << QStringLiteral(
-                            "No Flameshot translation found for %1")
+                            "No Mobshot translation found for %1")
                             .arg(ConfigHandler().uiLanguage());
         }
     }
@@ -221,13 +221,16 @@ int main(int argc, char* argv[])
     qRegisterMetaType<QList<int>>();
 
     QCoreApplication::setApplicationVersion(APP_VERSION);
-    QCoreApplication::setApplicationName(QStringLiteral("flameshot"));
-    QCoreApplication::setOrganizationName(QStringLiteral("flameshot"));
+    QCoreApplication::setApplicationName(QStringLiteral("Mobshot"));
+    QCoreApplication::setOrganizationName(QStringLiteral("Siserv"));
     QNetworkProxyFactory::setUseSystemConfiguration(true);
 
     // no arguments, just launch Flameshot
     if (argc == 1) {
         QApplication app(argc, argv);
+        // Mobshot is a tray application. Closing the editor or settings must
+        // not terminate the background process or make its tray icon vanish.
+        app.setQuitOnLastWindowClosed(false);
         configureTranslation(translator, qtTranslator);
 
 #ifdef USE_KDSINGLEAPPLICATION
@@ -236,7 +239,7 @@ int main(int argc, char* argv[])
         auto signalDaemon = SignalDaemon();
 #endif
         auto kdsa =
-          KDSingleApplication(QStringLiteral("org.flameshot.Flameshot"));
+          KDSingleApplication(QStringLiteral("br.com.siserv.Mobshot"));
 
         if (!kdsa.isPrimaryInstance() &&
             !ConfigHandler().allowMultipleGuiInstances()) {
@@ -282,7 +285,7 @@ int main(int argc, char* argv[])
     // Add description
     parser.setDescription(
       QObject::tr("Powerful yet simple to use screenshot software."));
-    parser.setGeneralErrorMessage(QObject::tr("See") + " flameshot --help.");
+    parser.setGeneralErrorMessage(QObject::tr("See") + " mobshot --help.");
     // Arguments
     CommandArgument fullArgument(
       QStringLiteral("full"),
@@ -293,7 +296,7 @@ int main(int argc, char* argv[])
       QStringLiteral("gui"),
       QObject::tr("Start a manual capture in GUI mode."));
     CommandArgument configArgument(QStringLiteral("config"),
-                                   QObject::tr("Configure") + " flameshot.");
+                                   QObject::tr("Configure") + " Mobshot.");
     CommandArgument screenArgument(
       QStringLiteral("screen"),
       QObject::tr("Capture a screenshot of the specified monitor."));
@@ -602,7 +605,7 @@ int main(int argc, char* argv[])
                 AbstractLogger::error()
                   << "The 'screen' command does not support "
                      "'--region screen<N>'.\n"
-                     "See flameshot --help.\n";
+                     "See mobshot --help.\n";
                 exit(1);
             }
             req.setInitialSelection(Region().value(region).toRect());

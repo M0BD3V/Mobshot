@@ -7,6 +7,8 @@ target_sources(
           systemnotification.h
           valuehandler.h
           strfparse.h
+          ocrservice.h
+          privacydetector.h
 )
 
 target_sources(
@@ -26,6 +28,8 @@ target_sources(
           colorutils.cpp
           history.cpp
           strfparse.cpp
+          ocrservice.cpp
+          privacydetector.cpp
 )
 
 IF (UNIX AND NOT APPLE)

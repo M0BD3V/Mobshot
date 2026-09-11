@@ -1,5 +1,7 @@
 <RCC>
     <qresource prefix="/">
+        <file>img/app/mobshot.png</file>
+        <file>img/app/mobshot.tray.svg</file>
         <file>img/app/org.flameshot.Flameshot.svg</file>
         <file>img/app/flameshot.svg</file>
         <file>img/app/org.flameshot.Flameshot.png</file>

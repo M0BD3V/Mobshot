@@ -57,7 +57,7 @@ int CallFlameshot(int argc, wchar_t* argv[], bool wait)
     std::wstring directory = (lastBackslash != std::wstring::npos)
                                ? pathstring.substr(0, lastBackslash + 1)
                                : L"";
-    std::wstring exePath = directory + L"flameshot.exe";
+    std::wstring exePath = directory + L"mobshot.exe";
 
     // Build the command line with each argument individually quoted.
     std::wstring cmdline;
@@ -151,7 +151,7 @@ int wmain(int argc, wchar_t* argv[])
     // if no args, do not wait for stdout => return 0.
     // If args exist, wait and return flameshot's exit code.
     if (argc == 1) {
-        std::cout << "Starting flameshot in daemon mode" << std::endl;
+        std::cout << "Starting Mobshot in daemon mode" << std::endl;
         int code = CallFlameshot(argc, argv, false);
         std::cout.flush();
         return code;

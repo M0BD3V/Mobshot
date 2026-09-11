@@ -51,6 +51,7 @@ public:
         TYPE_INVERT = 22,
         TYPE_ACCEPT = 23,
         TYPE_CANCEL = 24,
+        TYPE_OCR = 25,
     };
     Q_ENUM(Type);
 
@@ -80,7 +81,9 @@ public:
         // decrease tool size for all tools
         REQ_DECREASE_TOOL_SIZE,
         // Commit the active tool.
-        REQ_COMMIT_CURRENT_TOOL
+        REQ_COMMIT_CURRENT_TOOL,
+        // Run local OCR on the selected screenshot area.
+        REQ_COPY_TEXT
     };
 
     explicit CaptureTool(QObject* parent = nullptr)

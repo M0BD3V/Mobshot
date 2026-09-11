@@ -7,6 +7,7 @@
 
 class QEvent;
 class QKeyEvent;
+class QSizeGrip;
 
 class TextWidget : public QTextEdit
 {
@@ -25,6 +26,7 @@ protected:
 
 signals:
     void textUpdated(const QString& s);
+    void textAreaResized(const QSize& size);
     void editingFinished();
 
 public slots:
@@ -37,4 +39,5 @@ private slots:
 private:
     QSize m_baseSize;
     QSize m_minSize;
+    QSizeGrip* m_sizeGrip;
 };

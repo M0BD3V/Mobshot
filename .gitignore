@@ -1,6 +1,8 @@
 # common
 
 .idea
+/dist/
+/aqtinstall.log
 .cache
 # C++ objects and libs
 

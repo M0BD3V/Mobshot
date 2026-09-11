@@ -75,6 +75,10 @@ else ()
     add_executable(flameshot)
 endif ()
 
+# Keep the upstream target name internally to minimize fork drift while
+# publishing Mobshot-branded binaries.
+set_target_properties(flameshot PROPERTIES OUTPUT_NAME "mobshot")
+
 add_executable(Flameshot::flameshot ALIAS flameshot)
 
 if(FLAMESHOT_ICON)
@@ -87,8 +91,12 @@ if (WIN32)
         flameshot-cli
         PRIVATE
         windows-cli.cpp)
-    set_target_properties(flameshot-cli PROPERTIES OUTPUT_NAME "flameshot-cli")
-    target_link_options(flameshot-cli PRIVATE /SUBSYSTEM:CONSOLE)
+    set_target_properties(flameshot-cli PROPERTIES OUTPUT_NAME "mobshot-cli")
+    if (MSVC)
+        target_link_options(flameshot-cli PRIVATE /SUBSYSTEM:CONSOLE)
+    elseif (MINGW)
+        target_link_options(flameshot-cli PRIVATE -municode)
+    endif()
     set_property(TARGET flameshot PROPERTY WIN32_EXECUTABLE true)
     # Getting error D8016 - /utf-8 automatically set by current cmake/msvc ?
     #if (MSVC)
@@ -170,7 +178,7 @@ target_sources(
         flameshot
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../data/graphics.qrc
-        ${CMAKE_CURRENT_SOURCE_DIR}/../data/flameshot.rc # windows binary icon resource file
+        ${CMAKE_CURRENT_SOURCE_DIR}/../data/flameshot.rc # Windows binary metadata/icon
         ${QM_FILES}
         main.cpp)
 
@@ -231,6 +239,9 @@ if (APPLE)
             flameshot
             qhotkey
     )
+    if (MSVC)
+        target_link_libraries(flameshot windowsapp)
+    endif()
 endif ()
 
 
@@ -254,7 +265,7 @@ if (WIN32)
         mark_as_advanced(CLEAR OPENSSL_LIBRARIES OPENSSL_INCLUDE_DIR)
     endif ()
 
-    if (NOT USE_OPENSSL)
+    if (ENABLE_IMGUR AND NOT USE_OPENSSL)
         message(WARNING "OpenSSL is required to upload screenshots")
     endif ()
 

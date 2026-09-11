@@ -106,8 +106,15 @@ QWidget* TextTool::widget()
     m_widget->setFont(m_font);
     m_widget->setAlignment(m_alignment);
     m_widget->setText(m_text);
+    if (m_textArea.isValid()) {
+        m_widget->resize(m_textArea.size());
+    }
     m_widget->selectAll();
     connect(m_widget, &TextWidget::textUpdated, this, &TextTool::updateText);
+    connect(m_widget,
+            &TextWidget::textAreaResized,
+            this,
+            &TextTool::updateTextAreaSize);
     connect(
       m_widget,
       &TextWidget::editingFinished,
@@ -208,11 +215,13 @@ void TextTool::process(QPainter& painter, const QPixmap& pixmap)
     const int val = 5;
     QFont orig_font = painter.font();
     QPen orig_pen = painter.pen();
-    QFontMetrics fm(m_font);
-    QSize fontsize(fm.boundingRect(QRect(), 0, m_text).size());
-    fontsize.setWidth(fontsize.width() + val * 2);
-    fontsize.setHeight(fontsize.height() + val * 2);
-    m_textArea.setSize(fontsize);
+    if (!m_textArea.isValid()) {
+        QFontMetrics fm(m_font);
+        QSize fontsize(fm.boundingRect(QRect(), Qt::TextWordWrap, m_text).size());
+        fontsize.setWidth(fontsize.width() + val * 2);
+        fontsize.setHeight(fontsize.height() + val * 2);
+        m_textArea.setSize(fontsize);
+    }
     // draw text
     painter.setFont(m_font);
     painter.setPen(m_color);
@@ -285,6 +294,11 @@ void TextTool::onSizeChanged(int size)
 void TextTool::updateText(const QString& newText)
 {
     m_text = newText;
+}
+
+void TextTool::updateTextAreaSize(const QSize& size)
+{
+    m_textArea.setSize(size);
 }
 
 void TextTool::updateFamily(const QString& text)

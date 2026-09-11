@@ -17,9 +17,9 @@ protected:
     void paintEvent(QPaintEvent*) override;
 
 private:
-    const int m_magPixels = 8;
-    const int m_magOffset = 16;
-    const int magZoom = 10;
+    const int m_magPixels = 5;
+    const int m_magOffset = 12;
+    const int magZoom = 6;
     const int m_pixels = 2 * m_magPixels + 1;
     const int m_devicePixelRatio = 1;
     bool m_square;

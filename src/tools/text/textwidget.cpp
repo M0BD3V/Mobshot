@@ -5,16 +5,27 @@
 
 #include <QEvent>
 #include <QKeyEvent>
+#include <QResizeEvent>
+#include <QSizeGrip>
 
 TextWidget::TextWidget(QWidget* parent)
   : QTextEdit(parent)
+  , m_sizeGrip(new QSizeGrip(this))
 {
     setStyleSheet(QStringLiteral("TextWidget { background: transparent; }"));
-    connect(this, &TextWidget::textChanged, this, &TextWidget::adjustSize);
     connect(this, &TextWidget::textChanged, this, &TextWidget::emitTextUpdated);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setContextMenuPolicy(Qt::NoContextMenu);
+    setLineWrapMode(QTextEdit::WidgetWidth);
+
+    QFontMetrics fm(font());
+    m_baseSize = QSize(fm.horizontalAdvance(QLatin1Char('M')) * 24,
+                       fm.lineSpacing() * 4);
+    m_minSize = QSize(fm.horizontalAdvance(QLatin1Char('M')) * 8,
+                      fm.lineSpacing() * 2);
+    setMinimumSize(m_minSize);
+    resize(m_baseSize);
 }
 
 bool TextWidget::event(QEvent* e)
@@ -43,33 +54,29 @@ void TextWidget::keyPressEvent(QKeyEvent* e)
 
 void TextWidget::showEvent(QShowEvent* e)
 {
-    QFont font;
-    QFontMetrics fm(font);
-    setFixedWidth(fm.lineSpacing() * 6);
-    setFixedHeight(fm.lineSpacing() * 2.5);
-    m_baseSize = size();
-    m_minSize = m_baseSize;
     QTextEdit::showEvent(e);
-    adjustSize();
 }
 
 void TextWidget::resizeEvent(QResizeEvent* e)
 {
-    m_minSize.setHeight(qMin(m_baseSize.height(), height()));
-    m_minSize.setWidth(qMin(m_baseSize.width(), width()));
     QTextEdit::resizeEvent(e);
+    const QSize gripSize = m_sizeGrip->sizeHint();
+    m_sizeGrip->setGeometry(width() - gripSize.width(),
+                            height() - gripSize.height(),
+                            gripSize.width(),
+                            gripSize.height());
+    m_sizeGrip->raise();
+    emit textAreaResized(size());
 }
 
 void TextWidget::setFont(const QFont& f)
 {
     QTextEdit::setFont(f);
-    adjustSize();
 }
 
 void TextWidget::setAlignment(Qt::AlignmentFlag alignment)
 {
     QTextEdit::setAlignment(alignment);
-    adjustSize();
 }
 void TextWidget::setTextColor(const QColor& c)
 {
@@ -80,20 +87,7 @@ void TextWidget::setTextColor(const QColor& c)
 
 void TextWidget::adjustSize()
 {
-    QString&& text = this->toPlainText();
-
-    QFontMetrics fm(font());
-    QRect bounds = fm.boundingRect(QRect(), 0, text);
-    int pixelsWide = bounds.width() + fm.lineSpacing();
-    int pixelsHigh = bounds.height() * 1.15 + fm.lineSpacing();
-    if (pixelsWide < m_minSize.width()) {
-        pixelsWide = m_minSize.width();
-    }
-    if (pixelsHigh < m_minSize.height()) {
-        pixelsHigh = m_minSize.height();
-    }
-
-    this->setFixedSize(pixelsWide, pixelsHigh);
+    resize(sizeHint().expandedTo(m_minSize));
 }
 
 void TextWidget::emitTextUpdated()

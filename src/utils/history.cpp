@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QProcessEnvironment>
+#include <QStandardPaths>
 #include <QStringList>
 
 History::History()
@@ -11,7 +12,9 @@ History::History()
     // Get cache history path
     ConfigHandler config;
 #ifdef Q_OS_WIN
-    m_historyPath = QDir::homePath() + "/AppData/Roaming/flameshot/history/";
+    m_historyPath = QStandardPaths::writableLocation(
+                      QStandardPaths::AppLocalDataLocation) +
+                    "/History/";
 #else
     QString cachepath = QProcessEnvironment::systemEnvironment().value(
       "XDG_CACHE_HOME", QDir::homePath() + "/.cache");
@@ -32,21 +35,11 @@ const QString& History::path()
 
 void History::save(const QPixmap& pixmap, const QString& fileName)
 {
-    // scale preview only in local disk
-    QPixmap pixmapScaled = QPixmap(pixmap);
-    if (pixmap.height() / HISTORYPIXMAP_MAX_PREVIEW_HEIGHT >=
-        pixmap.width() / HISTORYPIXMAP_MAX_PREVIEW_WIDTH) {
-        pixmapScaled = pixmap.scaledToHeight(HISTORYPIXMAP_MAX_PREVIEW_HEIGHT,
-                                             Qt::SmoothTransformation);
-    } else {
-        pixmapScaled = pixmap.scaledToWidth(HISTORYPIXMAP_MAX_PREVIEW_WIDTH,
-                                            Qt::SmoothTransformation);
-    }
-
-    // save preview
+    // Mobshot keeps the full local capture. The history UI creates its own
+    // lightweight preview when displaying the item.
     QFile file(path() + fileName);
     if (file.open(QIODevice::WriteOnly)) {
-        pixmapScaled.save(&file, "PNG");
+        pixmap.save(&file, "PNG");
     }
 
     history();
@@ -65,7 +58,7 @@ const QList<QString>& History::history()
     for (const auto& fileName : images) {
         if (++cnt <= max) {
             m_thumbs.append(fileName);
-        } else {
+        } else if (!QFile::exists(path() + fileName + ".favorite")) {
             QFile file(path() + fileName);
             file.remove();
         }
