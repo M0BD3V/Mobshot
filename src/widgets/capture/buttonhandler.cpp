@@ -7,6 +7,8 @@
 #include <QPoint>
 #include <QScreen>
 
+#include <algorithm>
+
 // ButtonHandler is a handler for every active button. It makes easier to
 // manipulate the buttons as a unit.
 
@@ -26,17 +28,19 @@ ButtonHandler::ButtonHandler(QObject* parent)
 
 void ButtonHandler::hide()
 {
-    for (CaptureToolButton* b : m_vectorButtons) {
+    discardDeletedButtons();
+    for (const auto& b : m_vectorButtons) {
         b->hide();
     }
 }
 
 void ButtonHandler::show()
 {
+    discardDeletedButtons();
     if (m_vectorButtons.isEmpty() || m_vectorButtons.first()->isVisible()) {
         return;
     }
-    for (CaptureToolButton* b : m_vectorButtons) {
+    for (const auto& b : m_vectorButtons) {
         b->animatedShow();
     }
 }
@@ -44,7 +48,7 @@ void ButtonHandler::show()
 bool ButtonHandler::isVisible() const
 {
     bool ret = true;
-    for (const CaptureToolButton* b : m_vectorButtons) {
+    for (const auto& b : m_vectorButtons) {
         if (!b->isVisible()) {
             ret = false;
             break;
@@ -60,7 +64,9 @@ bool ButtonHandler::buttonsAreInside() const
 
 size_t ButtonHandler::size() const
 {
-    return m_vectorButtons.size();
+    return std::count_if(m_vectorButtons.cbegin(),
+                         m_vectorButtons.cend(),
+                         [](const auto& button) { return !button.isNull(); });
 }
 
 // updatePosition updates the position of the buttons around the
@@ -69,6 +75,7 @@ size_t ButtonHandler::size() const
 // the original in the center.
 void ButtonHandler::updatePosition(const QRect& selection)
 {
+    discardDeletedButtons();
     resetRegionTrack();
     const int vecLength = m_vectorButtons.size();
     if (vecLength == 0) {
@@ -338,7 +345,7 @@ void ButtonHandler::moveButtonsToPoints(const QVector<QPoint>& points,
                                         int& index)
 {
     for (const QPoint& p : points) {
-        auto* button = m_vectorButtons[index];
+        CaptureToolButton* button = m_vectorButtons[index];
         button->move(p);
         ++index;
     }
@@ -356,21 +363,22 @@ void ButtonHandler::adjustHorizontalCenter(QPoint& center)
 // setButtons redefines the buttons of the button handler
 void ButtonHandler::setButtons(const QVector<CaptureToolButton*>& v)
 {
-    if (v.isEmpty()) {
-        return;
+    // CaptureWidget owns these widgets. In particular, never delete the old
+    // list here: a queued Windows mouse event may still refer to it while a
+    // new capture session is being prepared.
+    m_vectorButtons.clear();
+    m_vectorButtons.reserve(v.size());
+    for (CaptureToolButton* button : v) {
+        m_vectorButtons.append(button);
     }
-
-    for (CaptureToolButton* b : m_vectorButtons) {
-        delete (b);
-    }
-    m_vectorButtons = v;
     m_buttonBaseSize = GlobalValues::buttonBaseSize();
     m_buttonExtendedSize = m_buttonBaseSize + m_separator;
 }
 
 bool ButtonHandler::contains(const QPoint& p) const
 {
-    if (m_vectorButtons.isEmpty()) {
+    if (m_vectorButtons.isEmpty() || m_vectorButtons.first().isNull() ||
+        m_vectorButtons.last().isNull()) {
         return false;
     }
     QPoint first(m_vectorButtons.first()->pos());
@@ -382,6 +390,12 @@ bool ButtonHandler::contains(const QPoint& p) const
     bottonRight += QPoint(m_buttonExtendedSize, m_buttonExtendedSize);
     QRegion r(QRect(topLeft, bottonRight).normalized());
     return r.contains(p);
+}
+
+void ButtonHandler::discardDeletedButtons()
+{
+    m_vectorButtons.removeIf(
+      [](const QPointer<CaptureToolButton>& button) { return button.isNull(); });
 }
 
 void ButtonHandler::updateScreenRegions(const QVector<QRect>& rects)

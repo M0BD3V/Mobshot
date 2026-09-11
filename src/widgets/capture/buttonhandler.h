@@ -5,6 +5,7 @@
 
 #include "capturetoolbutton.h"
 #include <QObject>
+#include <QPointer>
 #include <QRegion>
 #include <QVector>
 
@@ -48,7 +49,13 @@ private:
 
     QRect intersectWithAreas(const QRect& rect);
 
-    QVector<CaptureToolButton*> m_vectorButtons;
+    // Buttons belong to CaptureWidget, not to this layout helper. Capture
+    // sessions can be torn down while Windows still has a mouse event queued;
+    // QPointer turns such entries into null instead of leaving a dangling
+    // QWidget pointer for the next show/hide pass.
+    QVector<QPointer<CaptureToolButton>> m_vectorButtons;
+
+    void discardDeletedButtons();
 
     QVector<QRect> m_screenRegions;
 
