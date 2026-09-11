@@ -36,15 +36,18 @@
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFile>
 #include <QFontMetrics>
 #include <QMessageBox>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QProgressDialog>
+#include <QProcess>
 #include <QScreen>
 #include <QShortcut>
 #include <QPushButton>
 #include <QStringList>
+#include <QStandardPaths>
 #include <QTextEdit>
 #include <QTextCursor>
 #include <QThread>
@@ -1566,6 +1569,24 @@ void CaptureWidget::showOcrResult(const OcrResult& result)
     }
 
     QApplication::clipboard()->setText(result.text);
+#if defined(Q_OS_WIN)
+    // Keep the OCR result completely outside the capture process. Windows has
+    // repeatedly crashed while tearing down any QTextEdit hosted by the
+    // fullscreen process, even when the widget itself was retained. A real
+    // external Notepad process cannot affect the Mobshot tray daemon when it
+    // is closed.
+    const QString notePath = QStandardPaths::writableLocation(
+                               QStandardPaths::TempLocation) +
+                             QStringLiteral("/mobshot-ocr-result.txt");
+    QFile note(notePath);
+    if (note.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        note.write(result.text.toUtf8());
+        note.close();
+        QProcess::startDetached(QStringLiteral("notepad.exe"), { notePath });
+    }
+    OverlayMessage::push(tr("Texto copiado e aberto no Bloco de Notas"));
+    return;
+#endif
     // Keep the OCR editor outside the fullscreen capture window and avoid a
     // nested modal event loop. On Windows, destroying a focused QTextEdit
     // from that nested loop could crash textinputframework.dll and terminate
