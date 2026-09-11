@@ -83,9 +83,7 @@ public:
         // Commit the active tool.
         REQ_COMMIT_CURRENT_TOOL,
         // Run local OCR on the selected screenshot area.
-        REQ_COPY_TEXT,
-        // Repaint an object after changing its tool-specific appearance.
-        REQ_REDRAW_TOOL
+        REQ_COPY_TEXT
     };
 
     explicit CaptureTool(QObject* parent = nullptr)

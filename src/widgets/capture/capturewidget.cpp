@@ -1545,10 +1545,6 @@ void CaptureWidget::handleToolSignal(CaptureTool::Request r)
             worker->start();
             break;
         }
-        case CaptureTool::REQ_REDRAW_TOOL:
-            drawToolsData();
-            update();
-            break;
         default:
             break;
     }
