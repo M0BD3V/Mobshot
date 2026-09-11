@@ -404,6 +404,10 @@ void CaptureWidget::initButtons()
                 &CaptureTool::requestAction,
                 this,
                 &CaptureWidget::handleToolSignal);
+        connect(b->tool(), &CaptureTool::appearanceChanged, this, [this]() {
+            drawToolsData();
+            update();
+        });
 
         if (visibleButtonTypes.contains(t)) {
             connect(b,
@@ -847,6 +851,10 @@ bool CaptureWidget::startDrawObjectTool(const QPoint& pos)
                 &CaptureTool::requestAction,
                 this,
                 &CaptureWidget::handleToolSignal);
+        connect(m_activeTool, &CaptureTool::appearanceChanged, this, [this]() {
+            drawToolsData();
+            update();
+        });
 
         m_context.mousePos = m_displayGrid ? snapToGrid(pos) : pos;
         m_activeTool->drawStart(m_context);

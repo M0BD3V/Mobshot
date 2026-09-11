@@ -172,6 +172,7 @@ public:
 
 signals:
     void requestAction(Request r);
+    void appearanceChanged();
 
 protected:
     void copyParams(const CaptureTool* from, CaptureTool* to)
