@@ -143,24 +143,42 @@ QVector<QPointF> smoothGesture(const QVector<QPointF>& input)
         return input;
     }
 
-    QVector<QPointF> current;
-    current.reserve(input.size());
-    current.append(input.first());
-    // A generous distance suppresses tight mouse-scale bends and makes the
-    // resulting arcs broad and presentation-like.
-    constexpr qreal anchorDistance = 52.0;
-    for (int i = 1; i < input.size() - 1; ++i) {
-        // Stable, widely spaced anchors preserve completed parts of the
-        // gesture instead of refitting the whole curve when the tip moves.
-        if (QLineF(current.last(), input[i]).length() >= anchorDistance) {
-            current.append(input[i]);
+    // Arrow Lab preset 100: resample closely enough to preserve the gesture,
+    // then progressively relax local jitter while pinning both endpoints.
+    constexpr qreal spacing = 12.0;
+    QVector<QPointF> current { input.first() };
+    QPointF previous = input.first();
+    qreal carried = 0.0;
+    for (int i = 1; i < input.size(); ++i) {
+        const QPointF target = input[i];
+        qreal segment = QLineF(previous, target).length();
+        while (segment > 0.0 && carried + segment >= spacing) {
+            const qreal ratio = (spacing - carried) / segment;
+            previous += (target - previous) * ratio;
+            current.append(previous);
+            segment = QLineF(previous, target).length();
+            carried = 0.0;
         }
+        carried += segment;
+        previous = target;
     }
-    if (current.last() != input.last()) {
+    if (QLineF(current.last(), input.last()).length() > 0.5) {
         current.append(input.last());
     }
-    current.first() = input.first();
-    current.last() = input.last();
+
+    constexpr int passes = 8;
+    constexpr qreal weight = 0.45;
+    for (int pass = 0; pass < passes && current.size() >= 3; ++pass) {
+        QVector<QPointF> next;
+        next.reserve(current.size());
+        next.append(current.first());
+        for (int i = 1; i < current.size() - 1; ++i) {
+            const QPointF average = (current[i - 1] + current[i + 1]) / 2.0;
+            next.append(current[i] * (1.0 - weight) + average * weight);
+        }
+        next.append(current.last());
+        current = std::move(next);
+    }
     return current;
 }
 
@@ -192,19 +210,13 @@ QPainterPath gesturePath(const QVector<QPointF>& points)
         return path;
     }
 
-    // A Catmull-Rom spline converted to cubic Beziers passes through every
-    // stable anchor. It retains multiple intentional bends while keeping
-    // each transition broad and tangent-continuous.
-    constexpr qreal smoothness = 0.25;
-    for (int i = 0; i < points.size() - 1; ++i) {
-        const QPointF p0 = i > 0 ? points[i - 1] : points[i];
-        const QPointF p1 = points[i];
-        const QPointF p2 = points[i + 1];
-        const QPointF p3 = i + 2 < points.size() ? points[i + 2] : p2;
-        const QPointF control1 = p1 + (p2 - p0) * smoothness;
-        const QPointF control2 = p2 - (p3 - p1) * smoothness;
-        path.cubicTo(control1, control2, p2);
+    // Same midpoint quadratic curve used by Arrow Lab. It is C1-like in
+    // practice and avoids the sharp local corners caused by sparse anchors.
+    for (int i = 1; i < points.size() - 1; ++i) {
+        const QPointF midpoint = (points[i] + points[i + 1]) / 2.0;
+        path.quadTo(points[i], midpoint);
     }
+    path.lineTo(points.last());
     return path;
 }
 
