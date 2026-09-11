@@ -1572,7 +1572,11 @@ void CaptureWidget::showOcrResult(const OcrResult& result)
     // the tray daemon as well.
     auto* preview = new QDialog(
       nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-    preview->setAttribute(Qt::WA_DeleteOnClose, true);
+    // Keep this window alive after closing. Destroying a focused QTextEdit
+    // immediately after the fullscreen capture has repeatedly triggered
+    // crashes in different Windows input/Qt teardown modules. The small note
+    // is intentionally retained and reclaimed when the process exits.
+    preview->setAttribute(Qt::WA_DeleteOnClose, false);
     preview->setObjectName(QStringLiteral("mobshotOcrNote"));
     preview->setWindowTitle(tr("Texto reconhecido"));
     preview->resize(580, 360);
@@ -1632,9 +1636,9 @@ void CaptureWidget::showOcrResult(const OcrResult& result)
     });
     connect(buttons, &QDialogButtonBox::accepted, preview, [editor, preview]() {
         QApplication::clipboard()->setText(editor->toPlainText());
-        preview->accept();
+        preview->hide();
     });
-    connect(buttons, &QDialogButtonBox::rejected, preview, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::rejected, preview, &QWidget::hide);
     layout->addWidget(buttons);
     OverlayMessage::push(tr("Texto copiado para a área de transferência"));
     preview->show();
