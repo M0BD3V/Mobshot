@@ -3,12 +3,19 @@
 #include "ocrservice.h"
 
 #include <QCoreApplication>
+#include <QBuffer>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
+#include <QHostAddress>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
+#include <QTcpSocket>
 #include <QTemporaryFile>
+#include <QThread>
+#include <QtEndian>
 
 #if defined(Q_OS_WIN) && defined(_MSC_VER)
 #include <windows.h>
@@ -52,6 +59,69 @@ winrt::Windows::Graphics::Imaging::SoftwareBitmap toSoftwareBitmap(
     return bitmap;
 }
 
+} // namespace
+#endif
+
+#if !defined(Q_OS_WIN) || !defined(_MSC_VER)
+namespace {
+constexpr quint16 OcrWorkerPort = 47631;
+
+QString workerScript()
+{
+    return QStringLiteral(
+      "import io,socket,struct,sys,warnings\n"
+      "warnings.filterwarnings('ignore')\n"
+      "import easyocr,numpy as np\n"
+      "from PIL import Image\n"
+      "reader=easyocr.Reader(['pt','en'],gpu=False,verbose=False)\n"
+      "def receive(c,n):\n"
+      " data=b''\n"
+      " while len(data)<n:\n"
+      "  part=c.recv(n-len(data))\n"
+      "  if not part: raise ConnectionError()\n"
+      "  data+=part\n"
+      " return data\n"
+      "server=socket.socket();server.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)\n"
+      "server.bind(('127.0.0.1',int(sys.argv[1])));server.listen(2)\n"
+      "while True:\n"
+      " c,_=server.accept()\n"
+      " try:\n"
+      "  size=struct.unpack('!I',receive(c,4))[0]\n"
+      "  image=np.asarray(Image.open(io.BytesIO(receive(c,size))).convert('RGB'))\n"
+      "  items=reader.readtext(image,detail=1,paragraph=False,decoder='greedy',canvas_size=1920,mag_ratio=1.0)\n"
+      "  items.sort(key=lambda r:(sum(p[1] for p in r[0])/4,sum(p[0] for p in r[0])/4))\n"
+      "  payload=('OK\\n'+'\\n'.join(r[1] for r in items)).encode('utf-8')\n"
+      " except Exception as e: payload=('ERR\\n'+str(e)).encode('utf-8')\n"
+      " try:c.sendall(struct.pack('!I',len(payload))+payload)\n"
+      " finally:c.close()\n");
+}
+
+bool connectToWorker(QTcpSocket& socket, int timeoutMs)
+{
+    QElapsedTimer timer;
+    timer.start();
+    do {
+        socket.abort();
+        socket.connectToHost(QHostAddress::LocalHost, OcrWorkerPort);
+        if (socket.waitForConnected(500)) {
+            return true;
+        }
+        QThread::msleep(150);
+    } while (timer.elapsed() < timeoutMs);
+    return false;
+}
+
+QByteArray readBytes(QTcpSocket& socket, qsizetype count, int timeoutMs)
+{
+    QByteArray result;
+    while (result.size() < count) {
+        if (socket.bytesAvailable() == 0 && !socket.waitForReadyRead(timeoutMs)) {
+            return {};
+        }
+        result += socket.read(count - result.size());
+    }
+    return result;
+}
 } // namespace
 #endif
 
@@ -114,40 +184,59 @@ OcrResult OcrService::recognize(const QImage& image)
                  "EasyOCR não está instalado. Reinstale o Mobshot com o componente OCR local.") };
     }
 
-    QTemporaryFile input(QDir::tempPath() + QStringLiteral("/mobshot-ocr-XXXXXX.png"));
-    input.setAutoRemove(true);
-    if (!input.open()) {
-        return { {}, {}, QStringLiteral("Não foi possível preparar a imagem para o OCR.") };
-    }
-    const QString imagePath = input.fileName();
-    input.close();
-    if (!image.save(imagePath, "PNG")) {
+    QByteArray png;
+    QBuffer buffer(&png);
+    if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG")) {
         return { {}, {}, QStringLiteral("Não foi possível converter a seleção para OCR.") };
     }
 
-    const QString script = QStringLiteral(
-      "import easyocr,sys,warnings\n"
-      "warnings.filterwarnings('ignore')\n"
-      "reader=easyocr.Reader(['pt','en'],gpu=False,verbose=False)\n"
-      "items=reader.readtext(sys.argv[1],detail=1,paragraph=False,decoder='greedy',canvas_size=1920,mag_ratio=1.0)\n"
-      "items.sort(key=lambda r:(sum(p[1] for p in r[0])/4,sum(p[0] for p in r[0])/4))\n"
-      "print('\\n'.join(r[1] for r in items))\n");
-    QProcess process;
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("EASYOCR_MODULE_PATH"),
-                       runtimeRoot + QStringLiteral("/models"));
-    environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
-    process.setProcessEnvironment(environment);
-    process.start(python, { QStringLiteral("-c"), script, imagePath });
-    if (!process.waitForFinished(300000)) {
-        process.kill();
+    QTcpSocket socket;
+    if (!connectToWorker(socket, 300)) {
+        const QString scriptPath = QStandardPaths::writableLocation(
+                                     QStandardPaths::TempLocation) +
+                                   QStringLiteral("/mobshot-ocr-worker.py");
+        QFile scriptFile(scriptPath);
+        if (!scriptFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+            scriptFile.write(workerScript().toUtf8()) < 0) {
+            return { {}, {}, QStringLiteral("Não foi possível iniciar o motor de OCR.") };
+        }
+        scriptFile.close();
+
+        QProcess launcher;
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("EASYOCR_MODULE_PATH"),
+                           runtimeRoot + QStringLiteral("/models"));
+        environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
+        launcher.setProcessEnvironment(environment);
+        launcher.setProgram(python);
+        launcher.setArguments({ QStringLiteral("-u"),
+                                scriptPath,
+                                QString::number(OcrWorkerPort) });
+        if (!launcher.startDetached() || !connectToWorker(socket, 180000)) {
+            return { {}, {}, QStringLiteral("O motor EasyOCR não conseguiu iniciar.") };
+        }
+    }
+
+    QByteArray header(4, Qt::Uninitialized);
+    qToBigEndian<quint32>(static_cast<quint32>(png.size()), header.data());
+    if (socket.write(header) != header.size() || socket.write(png) != png.size() ||
+        !socket.waitForBytesWritten(30000)) {
+        return { {}, {}, QStringLiteral("Falha ao enviar a imagem ao EasyOCR.") };
+    }
+    const QByteArray responseHeader = readBytes(socket, 4, 300000);
+    if (responseHeader.size() != 4) {
         return { {}, {}, QStringLiteral("O EasyOCR excedeu o tempo de análise.") };
     }
-    const QString text = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
-    if (process.exitCode() != 0) {
-        const QString error = QString::fromUtf8(process.readAllStandardError()).trimmed();
-        return { {}, {}, QStringLiteral("Falha no EasyOCR: %1").arg(error) };
+    const quint32 responseSize = qFromBigEndian<quint32>(responseHeader.constData());
+    const QByteArray response = readBytes(socket, responseSize, 300000);
+    if (response.size() != responseSize) {
+        return { {}, {}, QStringLiteral("A resposta do EasyOCR foi interrompida.") };
     }
+    if (response.startsWith("ERR\n")) {
+        return { {}, {}, QStringLiteral("Falha no EasyOCR: %1")
+                          .arg(QString::fromUtf8(response.mid(4)).trimmed()) };
+    }
+    const QString text = QString::fromUtf8(response.mid(3)).trimmed();
     if (text.isEmpty()) {
         return { {}, {}, QStringLiteral("Nenhum texto foi encontrado na área selecionada.") };
     }
