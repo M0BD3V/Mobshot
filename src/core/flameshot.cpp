@@ -129,11 +129,8 @@ CaptureWidget* Flameshot::gui(const CaptureRequest& req)
     }
 
     CaptureRequest request = req;
-    if (request.captureMode() == CaptureRequest::GRAPHICAL_MODE &&
-        request.initialSelection().isNull() &&
-        ConfigHandler().saveLastRegion()) {
-        request.setInitialSelection(getLastRegion());
-    }
+    // Normal GUI capture always starts empty. Reusing the last region remains
+    // available only through the explicit "last region" command.
 
 #if defined(Q_OS_MACOS)
     // This is required on MacOS because of Mission Control. If you'll switch to

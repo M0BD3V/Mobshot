@@ -13,8 +13,8 @@ History::History()
     ConfigHandler config;
 #ifdef Q_OS_WIN
     m_historyPath = QStandardPaths::writableLocation(
-                      QStandardPaths::AppLocalDataLocation) +
-                    "/History/";
+                      QStandardPaths::PicturesLocation) +
+                    "/Mobshot/";
 #else
     QString cachepath = QProcessEnvironment::systemEnvironment().value(
       "XDG_CACHE_HOME", QDir::homePath() + "/.cache");
@@ -53,7 +53,9 @@ const QList<QString>& History::history()
                                              QDir::Files,
                                              QDir::Time);
     int cnt = 0;
-    int max = ConfigHandler().uploadHistoryMax();
+    // Mobshot keeps a deliberately small, predictable local history. Clamp
+    // older configurations that may still contain Flameshot's larger value.
+    int max = qMin(ConfigHandler().uploadHistoryMax(), 10);
     m_thumbs.clear();
     for (const auto& fileName : images) {
         if (++cnt <= max) {

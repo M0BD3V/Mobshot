@@ -102,8 +102,8 @@ static QMap<class QString, QSharedPointer<ValueHandler>>
     OPTION("savePath"                    ,ExistingDir        (               )),
     OPTION("savePathFixed"               ,Bool               ( false         )),
     OPTION("saveAsFileExtension"         ,SaveFileExtension  (               )),
-    OPTION("saveLastRegion"              ,Bool               ( true          )),
-    OPTION("uploadHistoryMax"            ,LowerBoundedInt    ( 0, 20         )),
+    OPTION("saveLastRegion"              ,Bool               ( false         )),
+    OPTION("uploadHistoryMax"            ,LowerBoundedInt    ( 0, 10         )),
     OPTION("undoLimit"                   ,BoundedInt         ( 0, 999, 100   )),
     // Interface tab
     OPTION("uiLanguage"                  ,String             ( "pt_BR"       )),

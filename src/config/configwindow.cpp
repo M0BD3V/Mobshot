@@ -28,6 +28,17 @@
 ConfigWindow::ConfigWindow(QWidget* parent)
   : QWidget(parent)
 {
+    setObjectName(QStringLiteral("mobshotSettings"));
+    setStyleSheet(QStringLiteral(
+      "#mobshotSettings { background: #f7f5ff; color: #24143d; }"
+      "QTabWidget::pane { border: 1px solid #ddd6fe; border-radius: 14px; background: white; top: -1px; }"
+      "QTabBar::tab { padding: 10px 18px; margin: 3px; border-radius: 10px; color: #5b4b78; }"
+      "QTabBar::tab:selected { background: #7c3aed; color: white; font-weight: 600; }"
+      "QPushButton { min-height: 28px; padding: 3px 12px; border: 1px solid #c4b5fd; border-radius: 9px; background: #faf8ff; }"
+      "QPushButton:hover { background: #ede9fe; border-color: #8b5cf6; }"
+      "QLineEdit, QComboBox, QSpinBox { min-height: 28px; border: 1px solid #d8d1ea; border-radius: 8px; padding: 2px 8px; background: white; }"
+      "QGroupBox { margin-top: 14px; padding-top: 12px; border: 1px solid #e9e5f5; border-radius: 12px; font-weight: 600; }"
+      "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; }"));
     // We wrap QTabWidget in a QWidget because of a Qt bug
     auto* layout = new QVBoxLayout(this);
     m_tabWidget = new QTabWidget(this);

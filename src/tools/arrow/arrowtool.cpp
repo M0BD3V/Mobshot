@@ -17,6 +17,16 @@ const int ArrowHeight = 24;
 const int MinArrowStyle = 0;
 const int MaxArrowStyle = 1;
 
+qreal modernHeadLength(int thickness)
+{
+    return std::max<qreal>(20.0, thickness * 4.6);
+}
+
+QColor subtleOutline(const QColor& color)
+{
+    return color.lightnessF() > 0.55 ? color.darker(118) : color.lighter(128);
+}
+
 bool isValidArrowStyle(int style)
 {
     return style >= MinArrowStyle && style <= MaxArrowStyle;
@@ -81,7 +91,7 @@ QPainterPath getModernArrowHead(QPointF directionPoint,
 
     const QPointF direction = (tip - directionPoint) / line.length();
     const QPointF normal(-direction.y(), direction.x());
-    const qreal headLength = std::max<qreal>(20.0, thickness * 4.6);
+    const qreal headLength = modernHeadLength(thickness);
     const qreal halfWidth = std::max<qreal>(9.0, thickness * 2.1);
     const QPointF baseCenter = tip - direction * headLength;
     const QPointF baseLeft = baseCenter + normal * halfWidth;
@@ -132,7 +142,7 @@ QVector<QPointF> smoothGesture(const QVector<QPointF>& input)
     current.append(input.first());
     // A generous distance suppresses tight mouse-scale bends and makes the
     // resulting arcs broad and presentation-like.
-    constexpr qreal anchorDistance = 40.0;
+    constexpr qreal anchorDistance = 52.0;
     for (int i = 1; i < input.size() - 1; ++i) {
         // Stable, widely spaced anchors preserve completed parts of the
         // gesture instead of refitting the whole curve when the tip moves.
@@ -179,7 +189,7 @@ QPainterPath gesturePath(const QVector<QPointF>& points)
     // A Catmull-Rom spline converted to cubic Beziers passes through every
     // stable anchor. It retains multiple intentional bends while keeping
     // each transition broad and tangent-continuous.
-    constexpr qreal smoothness = 0.20;
+    constexpr qreal smoothness = 0.25;
     for (int i = 0; i < points.size() - 1; ++i) {
         const QPointF p0 = i > 0 ? points[i - 1] : points[i];
         const QPointF p1 = points[i];
@@ -326,10 +336,21 @@ void ArrowTool::process(QPainter& painter, const QPixmap& pixmap)
     const QPoint& tail = isArrowReversed ? points().second : points().first;
 
     Q_UNUSED(pixmap)
-    painter.setPen(QPen(color(), size()));
+    const QColor outline = subtleOutline(color());
+    painter.setRenderHint(QPainter::Antialiasing, true);
     if (m_arrowStyle == ArrowStyle::Default) {
-        painter.drawLine(getShorterLine(tail, head, size()));
+        QLineF direction(tail, head);
+        const QPointF join = direction.length() > modernHeadLength(size())
+          ? QPointF(head) - (QPointF(head) - QPointF(tail)) / direction.length() *
+                              (modernHeadLength(size()) * 0.74)
+          : QPointF(tail);
+        painter.setPen(QPen(outline, size() + 2, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(QLineF(tail, join));
+        painter.setPen(QPen(color(), size(), Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(QLineF(tail, join));
         m_arrowPath = getModernArrowHead(tail, head, size());
+        painter.setPen(QPen(outline, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawPath(m_arrowPath);
         painter.fillPath(m_arrowPath, QBrush(color()));
         return;
     }
@@ -342,11 +363,27 @@ void ArrowTool::process(QPainter& painter, const QPixmap& pixmap)
         points = { tail, head };
     }
 
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(QPen(color(), size(), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    painter.drawPath(gesturePath(points));
     const QPointF headDirection = arrowDirectionPoint(points, size());
     m_arrowPath = getModernArrowHead(headDirection, points.last(), size());
+    QLineF finalDirection(headDirection, points.last());
+    QVector<QPointF> shaftPoints = points;
+    if (finalDirection.length() > 0) {
+        const QPointF direction = (points.last() - headDirection) /
+                                  finalDirection.length();
+        shaftPoints.last() = points.last() -
+                             direction * (modernHeadLength(size()) * 0.74);
+    }
+    const QPainterPath shaft = gesturePath(shaftPoints);
+    painter.setPen(QPen(outline,
+                        size() + 2,
+                        Qt::SolidLine,
+                        Qt::RoundCap,
+                        Qt::RoundJoin));
+    painter.drawPath(shaft);
+    painter.setPen(QPen(color(), size(), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPath(shaft);
+    painter.setPen(QPen(outline, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPath(m_arrowPath);
     painter.fillPath(m_arrowPath, QBrush(color()));
 }
 

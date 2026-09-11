@@ -2,6 +2,14 @@
 
 #include "ocrservice.h"
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QProcess>
+#include <QProcessEnvironment>
+#include <QStandardPaths>
+#include <QTemporaryFile>
+
 #if defined(Q_OS_WIN) && defined(_MSC_VER)
 #include <windows.h>
 #include <winrt/Windows.Globalization.h>
@@ -85,8 +93,58 @@ OcrResult OcrService::recognize(const QImage& image)
                             .arg(QString::fromStdWString(error.message().c_str())) };
     }
 #else
-    Q_UNUSED(image)
-    return { {}, {}, QStringLiteral(
-             "O OCR local requer o build oficial do Mobshot para Windows (MSVC).") };
+    const QString runtimeRoot =
+      QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) +
+      QStringLiteral("/EasyOCR");
+    QString python = qEnvironmentVariable("MOBSHOT_EASYOCR_PYTHON");
+    if (python.isEmpty()) {
+        const QString bundled = runtimeRoot + QStringLiteral("/python.exe");
+        python = QFileInfo::exists(bundled)
+          ? bundled
+          : QStandardPaths::findExecutable(QStringLiteral("python"));
+    }
+    if (python.isEmpty()) {
+        return { {}, {}, QStringLiteral(
+                 "EasyOCR não está instalado. Reinstale o Mobshot com o componente OCR local.") };
+    }
+
+    QTemporaryFile input(QDir::tempPath() + QStringLiteral("/mobshot-ocr-XXXXXX.png"));
+    input.setAutoRemove(true);
+    if (!input.open()) {
+        return { {}, {}, QStringLiteral("Não foi possível preparar a imagem para o OCR.") };
+    }
+    const QString imagePath = input.fileName();
+    input.close();
+    if (!image.save(imagePath, "PNG")) {
+        return { {}, {}, QStringLiteral("Não foi possível converter a seleção para OCR.") };
+    }
+
+    const QString script = QStringLiteral(
+      "import easyocr,sys,warnings\n"
+      "warnings.filterwarnings('ignore')\n"
+      "reader=easyocr.Reader(['pt','en'],gpu=False,verbose=False)\n"
+      "items=reader.readtext(sys.argv[1],detail=1,paragraph=False,decoder='greedy',canvas_size=1920,mag_ratio=1.0)\n"
+      "items.sort(key=lambda r:(sum(p[1] for p in r[0])/4,sum(p[0] for p in r[0])/4))\n"
+      "print('\\n'.join(r[1] for r in items))\n");
+    QProcess process;
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("EASYOCR_MODULE_PATH"),
+                       runtimeRoot + QStringLiteral("/models"));
+    environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
+    process.setProcessEnvironment(environment);
+    process.start(python, { QStringLiteral("-c"), script, imagePath });
+    if (!process.waitForFinished(300000)) {
+        process.kill();
+        return { {}, {}, QStringLiteral("O EasyOCR excedeu o tempo de análise.") };
+    }
+    const QString text = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+    if (process.exitCode() != 0) {
+        const QString error = QString::fromUtf8(process.readAllStandardError()).trimmed();
+        return { {}, {}, QStringLiteral("Falha no EasyOCR: %1").arg(error) };
+    }
+    if (text.isEmpty()) {
+        return { {}, {}, QStringLiteral("Nenhum texto foi encontrado na área selecionada.") };
+    }
+    return { text, QStringLiteral("pt+en (EasyOCR)"), {} };
 #endif
 }

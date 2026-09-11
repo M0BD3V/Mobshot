@@ -12,6 +12,10 @@ TextWidget::TextWidget(QWidget* parent)
   : QTextEdit(parent)
   , m_sizeGrip(new QSizeGrip(this))
 {
+    // Editing and selecting text must never leak mouse gestures to the
+    // fullscreen capture canvas behind this widget.
+    setAttribute(Qt::WA_NoMousePropagation, true);
+    setFocusPolicy(Qt::StrongFocus);
     setStyleSheet(QStringLiteral("TextWidget { background: transparent; }"));
     connect(this, &TextWidget::textChanged, this, &TextWidget::emitTextUpdated);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
