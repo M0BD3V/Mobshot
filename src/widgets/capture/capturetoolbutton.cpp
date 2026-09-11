@@ -28,6 +28,14 @@ CaptureToolButton::CaptureToolButton(const CaptureTool::Type t, QWidget* parent)
 
 CaptureToolButton::~CaptureToolButton()
 {
+    // A nested dialog (for example the OCR preview) may let an emerge
+    // animation finish while the capture UI is being torn down. Stop it
+    // before destroying the tool so its finished callback cannot dereference
+    // an already released m_tool.
+    if (m_emergeAnimation) {
+        m_emergeAnimation->stop();
+        disconnect(m_emergeAnimation, nullptr, this, nullptr);
+    }
     if (m_tool) {
         delete m_tool;
         m_tool = nullptr;
@@ -77,6 +85,9 @@ void CaptureToolButton::initButton()
 
 void CaptureToolButton::updateIcon()
 {
+    if (!m_tool) {
+        return;
+    }
     setIcon(icon());
     setIconSize(size() * 0.6);
 }
@@ -89,7 +100,7 @@ const QList<CaptureTool::Type>& CaptureToolButton::getIterableButtonTypes()
 // get icon returns the icon for the type of button
 QIcon CaptureToolButton::icon() const
 {
-    return m_tool->icon(m_mainColor, true);
+    return m_tool ? m_tool->icon(m_mainColor, true) : QIcon();
 }
 
 void CaptureToolButton::mousePressEvent(QMouseEvent* e)
