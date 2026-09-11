@@ -32,12 +32,15 @@ public slots:
     void drawStart(const CaptureContext& context) override;
     void drawMove(const QPoint& point) override;
     void drawEnd(const QPoint& point) override;
+    void onColorChanged(const QColor& color) override;
 
 public:
     void move(const QPoint& pos) override;
 
 private slots:
     void setArrowStyle(int style);
+    void setOutlineEnabled(bool enabled);
+    void setOutlineWidth(int width);
 
 private:
     enum class ArrowStyle
@@ -49,4 +52,11 @@ private:
     QPainterPath m_arrowPath;
     QVector<QPointF> m_gesturePoints;
     ArrowStyle m_arrowStyle = ArrowStyle::Default;
+    bool m_outlineEnabled = true;
+    int m_outlineWidth = 2;
+    QColor m_outlineColor;
+    QColor m_gradientColor1;
+    QColor m_gradientColor2;
+    QColor m_gradientColor3;
+    bool m_customGradient = false;
 };

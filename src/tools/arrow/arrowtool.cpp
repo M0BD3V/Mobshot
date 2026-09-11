@@ -5,8 +5,14 @@
 #include "utils/confighandler.h"
 
 #include <QComboBox>
+#include <QCheckBox>
+#include <QColorDialog>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QVBoxLayout>
 #include <QWidget>
 #include <algorithm>
 #include <cmath>
@@ -142,7 +148,7 @@ QVector<QPointF> smoothGesture(const QVector<QPointF>& input)
     current.append(input.first());
     // A generous distance suppresses tight mouse-scale bends and makes the
     // resulting arcs broad and presentation-like.
-    constexpr qreal anchorDistance = 52.0;
+    constexpr qreal anchorDistance = 80.0;
     for (int i = 1; i < input.size() - 1; ++i) {
         // Stable, widely spaced anchors preserve completed parts of the
         // gesture instead of refitting the whole curve when the tip moves.
@@ -189,7 +195,7 @@ QPainterPath gesturePath(const QVector<QPointF>& points)
     // A Catmull-Rom spline converted to cubic Beziers passes through every
     // stable anchor. It retains multiple intentional bends while keeping
     // each transition broad and tangent-continuous.
-    constexpr qreal smoothness = 0.25;
+    constexpr qreal smoothness = 0.30;
     for (int i = 0; i < points.size() - 1; ++i) {
         const QPointF p0 = i > 0 ? points[i - 1] : points[i];
         const QPointF p1 = points[i];
@@ -207,6 +213,11 @@ QPainterPath gesturePath(const QVector<QPointF>& points)
 ArrowTool::ArrowTool(QObject* parent)
   : AbstractTwoPointTool(parent)
 {
+    const QColor baseColor = ConfigHandler().drawColor();
+    m_gradientColor1 = baseColor;
+    m_gradientColor2 = baseColor;
+    m_gradientColor3 = baseColor;
+    m_outlineColor = subtleOutline(baseColor);
     const int configuredArrowStyle = ConfigHandler().arrowStyle();
     if (isValidArrowStyle(configuredArrowStyle)) {
         m_arrowStyle = static_cast<ArrowStyle>(configuredArrowStyle);
@@ -293,20 +304,73 @@ QRect ArrowTool::boundingRect() const
 QWidget* ArrowTool::configurationWidget()
 {
     auto* widget = new QWidget();
-    auto* layout = new QHBoxLayout(widget);
-    auto* label = new QLabel(tr("Arrow style:"), widget);
+    auto* layout = new QVBoxLayout(widget);
+    auto* form = new QFormLayout();
     auto* styleSelector = new QComboBox(widget);
-
-    styleSelector->addItem(tr("Default"));
-    styleSelector->addItem(tr("Curved"));
+    styleSelector->addItem(tr("Reta"));
+    styleSelector->addItem(tr("Curva gestual"));
     styleSelector->setCurrentIndex(static_cast<int>(m_arrowStyle));
     connect(styleSelector,
             qOverload<int>(&QComboBox::currentIndexChanged),
             this,
             &ArrowTool::setArrowStyle);
+    form->addRow(tr("Estilo:"), styleSelector);
 
-    layout->addWidget(label);
-    layout->addWidget(styleSelector);
+    auto* outlineEnabled = new QCheckBox(tr("Ativar contorno"), widget);
+    outlineEnabled->setChecked(m_outlineEnabled);
+    connect(outlineEnabled,
+            &QCheckBox::toggled,
+            this,
+            &ArrowTool::setOutlineEnabled);
+    form->addRow(QString(), outlineEnabled);
+
+    auto* outlineWidth = new QSpinBox(widget);
+    outlineWidth->setRange(1, 12);
+    outlineWidth->setSuffix(tr(" px"));
+    outlineWidth->setValue(m_outlineWidth);
+    connect(outlineWidth,
+            qOverload<int>(&QSpinBox::valueChanged),
+            this,
+            &ArrowTool::setOutlineWidth);
+    form->addRow(tr("Espessura da borda:"), outlineWidth);
+    layout->addLayout(form);
+
+    auto addColorButton = [this, widget, layout](const QString& label,
+                                                 QColor* target,
+                                                 bool gradientColor) {
+        auto* row = new QHBoxLayout();
+        auto* text = new QLabel(label, widget);
+        auto* button = new QPushButton(target->name(QColor::HexRgb), widget);
+        auto refresh = [button](const QColor& color) {
+            const QColor foreground = color.lightnessF() < 0.5 ? Qt::white : Qt::black;
+            button->setText(color.name(QColor::HexRgb));
+            button->setStyleSheet(QStringLiteral(
+              "QPushButton { background:%1; color:%2; border:1px solid #777; padding:5px; }")
+                                    .arg(color.name(), foreground.name()));
+        };
+        refresh(*target);
+        connect(button, &QPushButton::clicked, this, [this, widget, target, gradientColor, refresh]() {
+            const QColor selected = QColorDialog::getColor(*target, widget, tr("Escolher cor"));
+            if (!selected.isValid()) {
+                return;
+            }
+            *target = selected;
+            if (gradientColor) {
+                m_customGradient = true;
+            }
+            refresh(selected);
+            emit requestAction(CaptureTool::REQ_REDRAW_TOOL);
+        });
+        row->addWidget(text);
+        row->addStretch();
+        row->addWidget(button);
+        layout->addLayout(row);
+    };
+
+    addColorButton(tr("Cor inicial"), &m_gradientColor1, true);
+    addColorButton(tr("Cor central"), &m_gradientColor2, true);
+    addColorButton(tr("Cor final"), &m_gradientColor3, true);
+    addColorButton(tr("Cor do contorno"), &m_outlineColor, false);
 
     return widget;
 }
@@ -324,6 +388,13 @@ void ArrowTool::copyParams(const ArrowTool* from, ArrowTool* to)
     to->m_arrowPath = from->m_arrowPath;
     to->m_gesturePoints = from->m_gesturePoints;
     to->m_arrowStyle = from->m_arrowStyle;
+    to->m_outlineEnabled = from->m_outlineEnabled;
+    to->m_outlineWidth = from->m_outlineWidth;
+    to->m_outlineColor = from->m_outlineColor;
+    to->m_gradientColor1 = from->m_gradientColor1;
+    to->m_gradientColor2 = from->m_gradientColor2;
+    to->m_gradientColor3 = from->m_gradientColor3;
+    to->m_customGradient = from->m_customGradient;
 }
 
 void ArrowTool::process(QPainter& painter, const QPixmap& pixmap)
@@ -336,7 +407,11 @@ void ArrowTool::process(QPainter& painter, const QPixmap& pixmap)
     const QPoint& tail = isArrowReversed ? points().second : points().first;
 
     Q_UNUSED(pixmap)
-    const QColor outline = subtleOutline(color());
+    QLinearGradient gradient(tail, head);
+    gradient.setColorAt(0.0, m_gradientColor1);
+    gradient.setColorAt(0.5, m_gradientColor2);
+    gradient.setColorAt(1.0, m_gradientColor3);
+    const QBrush arrowBrush(gradient);
     painter.setRenderHint(QPainter::Antialiasing, true);
     if (m_arrowStyle == ArrowStyle::Default) {
         QLineF direction(tail, head);
@@ -344,14 +419,25 @@ void ArrowTool::process(QPainter& painter, const QPixmap& pixmap)
           ? QPointF(head) - (QPointF(head) - QPointF(tail)) / direction.length() *
                               (modernHeadLength(size()) * 0.74)
           : QPointF(tail);
-        painter.setPen(QPen(outline, size() + 2, Qt::SolidLine, Qt::RoundCap));
-        painter.drawLine(QLineF(tail, join));
-        painter.setPen(QPen(color(), size(), Qt::SolidLine, Qt::RoundCap));
+        if (m_outlineEnabled) {
+            painter.setPen(QPen(m_outlineColor,
+                                size() + m_outlineWidth * 2,
+                                Qt::SolidLine,
+                                Qt::RoundCap));
+            painter.drawLine(QLineF(tail, join));
+        }
+        painter.setPen(QPen(arrowBrush, size(), Qt::SolidLine, Qt::RoundCap));
         painter.drawLine(QLineF(tail, join));
         m_arrowPath = getModernArrowHead(tail, head, size());
-        painter.setPen(QPen(outline, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setPen(m_outlineEnabled
+                         ? QPen(m_outlineColor,
+                                m_outlineWidth,
+                                Qt::SolidLine,
+                                Qt::RoundCap,
+                                Qt::RoundJoin)
+                         : QPen(Qt::NoPen));
+        painter.setBrush(arrowBrush);
         painter.drawPath(m_arrowPath);
-        painter.fillPath(m_arrowPath, QBrush(color()));
         return;
     }
 
@@ -374,17 +460,29 @@ void ArrowTool::process(QPainter& painter, const QPixmap& pixmap)
                              direction * (modernHeadLength(size()) * 0.74);
     }
     const QPainterPath shaft = gesturePath(shaftPoints);
-    painter.setPen(QPen(outline,
-                        size() + 2,
+    if (m_outlineEnabled) {
+        painter.setPen(QPen(m_outlineColor,
+                            size() + m_outlineWidth * 2,
+                            Qt::SolidLine,
+                            Qt::RoundCap,
+                            Qt::RoundJoin));
+        painter.drawPath(shaft);
+    }
+    painter.setPen(QPen(arrowBrush,
+                        size(),
                         Qt::SolidLine,
                         Qt::RoundCap,
                         Qt::RoundJoin));
     painter.drawPath(shaft);
-    painter.setPen(QPen(color(), size(), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    painter.drawPath(shaft);
-    painter.setPen(QPen(outline, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setPen(m_outlineEnabled
+                     ? QPen(m_outlineColor,
+                            m_outlineWidth,
+                            Qt::SolidLine,
+                            Qt::RoundCap,
+                            Qt::RoundJoin)
+                     : QPen(Qt::NoPen));
+    painter.setBrush(arrowBrush);
     painter.drawPath(m_arrowPath);
-    painter.fillPath(m_arrowPath, QBrush(color()));
 }
 
 void ArrowTool::pressed(CaptureContext& context)
@@ -415,6 +513,17 @@ void ArrowTool::drawEnd(const QPoint& point)
     }
 }
 
+void ArrowTool::onColorChanged(const QColor& newColor)
+{
+    AbstractTwoPointTool::onColorChanged(newColor);
+    if (!m_customGradient) {
+        m_gradientColor1 = newColor;
+        m_gradientColor2 = newColor;
+        m_gradientColor3 = newColor;
+        m_outlineColor = subtleOutline(newColor);
+    }
+}
+
 void ArrowTool::move(const QPoint& pos)
 {
     const QPoint oldPos = *AbstractTwoPointTool::pos();
@@ -432,4 +541,17 @@ void ArrowTool::setArrowStyle(int style)
     }
     m_arrowStyle = static_cast<ArrowStyle>(style);
     ConfigHandler().setArrowStyle(style);
+    emit requestAction(CaptureTool::REQ_REDRAW_TOOL);
+}
+
+void ArrowTool::setOutlineEnabled(bool enabled)
+{
+    m_outlineEnabled = enabled;
+    emit requestAction(CaptureTool::REQ_REDRAW_TOOL);
+}
+
+void ArrowTool::setOutlineWidth(int width)
+{
+    m_outlineWidth = std::clamp(width, 1, 12);
+    emit requestAction(CaptureTool::REQ_REDRAW_TOOL);
 }
